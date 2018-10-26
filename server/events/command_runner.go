@@ -158,8 +158,10 @@ func (c *DefaultCommandRunner) RunCommentCommand(baseRepo models.Repo, maybeHead
 		projectCmds, err = c.ProjectCommandBuilder.BuildPlanCommands(ctx, cmd)
 	case ApplyCommand:
 		projectCmds, err = c.ProjectCommandBuilder.BuildApplyCommands(ctx, cmd)
+    case CheckCommand:
+        projectCmds, err = c.ProjectCommandBuilder.BuildCheckCommands(ctx, cmd)
 	default:
-		ctx.Log.Err("failed to determine desired command, neither plan nor apply")
+		ctx.Log.Err("failed to determine desired command, neither `plan`, `apply`, nor `check`")
 		return
 	}
 	if err != nil {

@@ -301,6 +301,8 @@ type ProjectCommandContext struct {
 	// ApplyCmd is the command that users should run to apply this plan. If
 	// this is an apply then this will be empty.
 	ApplyCmd string
+    // CheckCmd is the command that users should run before their apply command optionally to double check what their apply would do
+    CheckCmd string
 }
 
 // SplitRepoFullName splits a repo full name up into its owner and repo name

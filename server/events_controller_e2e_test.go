@@ -191,6 +191,16 @@ func TestGitHubWorkflow(t *testing.T) {
 			},
 			ExpMergeCommentFile: "exp-output-merge.txt",
 		},
+		{
+			Description:            "simple check",
+			RepoDir:                "simple",
+			ModifiedFiles:          []string{"main.tf"},
+			ExpAutoplanCommentFile: "check.txt",
+			CommentAndReplies: []string{
+				"atlantis check",
+			},
+			ExpMergeCommentFile: "exp-output-merge.txt",
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.Description, func(t *testing.T) {

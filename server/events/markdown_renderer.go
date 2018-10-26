@@ -27,6 +27,7 @@ import (
 const (
 	planCommandTitle  = "Plan"
 	applyCommandTitle = "Apply"
+    checkCommandTitle = "Check"
 	// maxUnwrappedLines is the maximum number of lines the Terraform output
 	// can be before we wrap it in an expandable template.
 	maxUnwrappedLines = 12
@@ -129,8 +130,13 @@ func (m *MarkdownRenderer) renderProjectResults(results []ProjectResult, common 
 			} else {
 				resultData.Rendered = m.renderTemplate(applyUnwrappedSuccessTmpl, struct{ Output string }{result.ApplySuccess})
 			}
-
-		} else {
+		} else if result.CheckSuccess != "" {
+            if m.shouldUseWrappedTmpl(vcsHost, result.CheckSuccess) {
+                resultData.Rendered = m.renderTemplate(applyWrappedSuccessTmpl, struct{ Output string }{result.CheckSuccess})
+			} else {
+				resultData.Rendered = m.renderTemplate(applyUnwrappedSuccessTmpl, struct{ Output string }{result.CheckSuccess})
+			}
+        } else {
 			resultData.Rendered = "Found no template. This is a bug!"
 		}
 		resultsTmplData = append(resultsTmplData, resultData)
@@ -144,12 +150,14 @@ func (m *MarkdownRenderer) renderProjectResults(results []ProjectResult, common 
 		tmpl = singleProjectPlanUnsuccessfulTmpl
 	case len(resultsTmplData) == 1 && common.Command == applyCommandTitle:
 		tmpl = singleProjectApplyTmpl
+    case common.Command == checkCommandTitle:
+        tmpl = singleProjectCheckTmpl
 	case common.Command == planCommandTitle:
 		tmpl = multiProjectPlanTmpl
 	case common.Command == applyCommandTitle:
 		tmpl = multiProjectApplyTmpl
 	default:
-		return "no template matched–this is a bug"
+		return "no template matched" + common.Command + "-" + checkCommandTitle + "-"
 	}
 	return m.renderTemplate(tmpl, ResultData{resultsTmplData, common})
 }
@@ -208,6 +216,10 @@ var multiProjectPlanTmpl = template.Must(template.New("").Funcs(sprig.TxtFuncMap
 		"---\n{{end}}{{ if gt (len .Results) 0 }}* :fast_forward: To **apply** all unapplied plans from this pull request, comment:\n" +
 		"    * `atlantis apply`{{end}}" +
 		logTmpl))
+
+var singleProjectCheckTmpl = template.Must(template.New("").Parse(
+	"{{$result := index .Results 0}}Ran {{.Command}} in dir: `{{$result.RepoRelDir}}` workspace: `{{$result.Workspace}}`\n\n{{$result.Rendered}}\n" + logTmpl))
+
 var multiProjectApplyTmpl = template.Must(template.New("").Funcs(sprig.TxtFuncMap()).Parse(
 	"Ran {{.Command}} for {{ len .Results }} projects:\n" +
 		"{{ range $result := .Results }}" +

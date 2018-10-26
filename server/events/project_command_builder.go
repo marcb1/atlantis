@@ -32,6 +32,10 @@ type ProjectCommandBuilder interface {
 	// comment doesn't specify one project then there may be multiple commands
 	// to be run.
 	BuildPlanCommands(ctx *CommandContext, commentCommand *CommentCommand) ([]models.ProjectCommandContext, error)
+    // BuildCheckCommands buld project check-apply commands for this comment. If the
+    // comment doesn't specify one project then there may be multiple commands
+    // to be run.
+    BuildCheckCommands(ctx *CommandContext, commentCommand *CommentCommand) ([]models.ProjectCommandContext, error)
 	// BuildApplyCommands builds project apply commands for this comment. If the
 	// comment doesn't specify one project then there may be multiple commands
 	// to be run.
@@ -142,6 +146,7 @@ func (p *DefaultProjectCommandBuilder) buildPlanAllCommands(ctx *CommandContext,
 				Workspace:     DefaultWorkspace,
 				Verbose:       verbose,
 				RePlanCmd:     p.CommentBuilder.BuildPlanComment(mp.Path, DefaultWorkspace, "", commentFlags),
+                CheckCmd:      p.CommentBuilder.BuildCheckComment(mp.Path, DefaultWorkspace, ""),
 				ApplyCmd:      p.CommentBuilder.BuildApplyComment(mp.Path, DefaultWorkspace, ""),
 			})
 		}
@@ -171,6 +176,7 @@ func (p *DefaultProjectCommandBuilder) buildPlanAllCommands(ctx *CommandContext,
 				GlobalConfig:  &config,
 				Verbose:       verbose,
 				RePlanCmd:     p.CommentBuilder.BuildPlanComment(mp.Dir, mp.Workspace, mp.GetName(), commentFlags),
+                CheckCmd: p.CommentBuilder.BuildCheckComment(mp.Dir, DefaultWorkspace, mp.GetName()),
 				ApplyCmd:      p.CommentBuilder.BuildApplyComment(mp.Dir, mp.Workspace, mp.GetName()),
 			})
 		}
@@ -220,6 +226,36 @@ func (p *DefaultProjectCommandBuilder) BuildPlanCommands(ctx *CommandContext, cm
 	return []models.ProjectCommandContext{pcc}, nil
 }
 
+func (p *DefaultProjectCommandBuilder) buildCheckAllCommands(ctx *CommandContext, commentCmd *CommentCommand) ([]models.ProjectCommandContext, error) {
+	// lock all dirs in this pull request
+	unlockFn, err := p.WorkingDirLocker.TryLockPull(ctx.BaseRepo.FullName, ctx.Pull.Num)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockFn()
+
+	pullDir, err := p.WorkingDir.GetPullDir(ctx.BaseRepo, ctx.Pull)
+	if err != nil {
+		return nil, err
+	}
+
+	plans, err := p.PendingPlanFinder.Find(pullDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var cmds []models.ProjectCommandContext
+	for _, plan := range plans {
+        ctx.Log.Debug("building check command for dir %d", plan.RepoRelDir)
+		cmd, err := p.buildProjectCommandCtx(ctx, commentCmd.ProjectName, commentCmd.Flags, plan.RepoDir, plan.RepoRelDir, plan.Workspace)
+		if err != nil {
+			return nil, errors.Wrapf(err, "building command for dir %q", plan.RepoRelDir)
+		}
+		cmds = append(cmds, cmd)
+	}
+	return cmds, nil
+}
+
 func (p *DefaultProjectCommandBuilder) buildApplyAllCommands(ctx *CommandContext, commentCmd *CommentCommand) ([]models.ProjectCommandContext, error) {
 	// lock all dirs in this pull request
 	unlockFn, err := p.WorkingDirLocker.TryLockPull(ctx.BaseRepo.FullName, ctx.Pull.Num)
@@ -263,7 +299,45 @@ func (p *DefaultProjectCommandBuilder) BuildApplyCommands(ctx *CommandContext, c
 	return []models.ProjectCommandContext{pac}, nil
 }
 
+func (p *DefaultProjectCommandBuilder) BuildCheckCommands(ctx *CommandContext, cmd *CommentCommand) ([]models.ProjectCommandContext, error) {
+	if !cmd.IsForSpecificProject() {
+		return p.buildCheckAllCommands(ctx, cmd)
+	}
+	pac, err := p.buildProjectCheckCommand(ctx, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return []models.ProjectCommandContext{pac}, nil
+
+}
+
 func (p *DefaultProjectCommandBuilder) buildProjectApplyCommand(ctx *CommandContext, cmd *CommentCommand) (models.ProjectCommandContext, error) {
+	workspace := DefaultWorkspace
+	if cmd.Workspace != "" {
+		workspace = cmd.Workspace
+	}
+
+	var projCtx models.ProjectCommandContext
+	unlockFn, err := p.WorkingDirLocker.TryLock(ctx.BaseRepo.FullName, ctx.Pull.Num, workspace)
+	if err != nil {
+		return projCtx, err
+	}
+	defer unlockFn()
+
+	repoDir, err := p.WorkingDir.GetWorkingDir(ctx.BaseRepo, ctx.Pull, workspace)
+	if err != nil {
+		return projCtx, err
+	}
+
+	repoRelDir := DefaultRepoRelDir
+	if cmd.RepoRelDir != "" {
+		repoRelDir = cmd.RepoRelDir
+	}
+
+	return p.buildProjectCommandCtx(ctx, cmd.ProjectName, cmd.Flags, repoDir, repoRelDir, workspace)
+}
+
+func (p *DefaultProjectCommandBuilder) buildProjectCheckCommand(ctx *CommandContext, cmd *CommentCommand) (models.ProjectCommandContext, error) {
 	workspace := DefaultWorkspace
 	if cmd.Workspace != "" {
 		workspace = cmd.Workspace
@@ -315,6 +389,7 @@ func (p *DefaultProjectCommandBuilder) buildProjectCommandCtx(ctx *CommandContex
 		GlobalConfig:  globalCfg,
 		RePlanCmd:     p.CommentBuilder.BuildPlanComment(repoRelDir, workspace, projectName, commentFlags),
 		ApplyCmd:      p.CommentBuilder.BuildApplyComment(repoRelDir, workspace, projectName),
+        CheckCmd:      p.CommentBuilder.BuildCheckComment(repoRelDir, workspace, projectName),
 	}, nil
 }
 

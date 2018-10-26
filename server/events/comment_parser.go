@@ -60,6 +60,8 @@ type CommentBuilder interface {
 	BuildPlanComment(repoRelDir string, workspace string, project string, commentArgs []string) string
 	// BuildApplyComment builds an apply comment for the specified args.
 	BuildApplyComment(repoRelDir string, workspace string, project string) string
+    // BuildCheckComment builds a check comment for the specifies args.
+    BuildCheckComment(repoRelDir string, workspace string, project string) string
 }
 
 // CommentParser implements CommentParsing
@@ -97,6 +99,7 @@ type CommentParseResult struct {
 // - @GithubUser plan -w staging
 // - atlantis plan -w staging -d dir --verbose
 // - atlantis plan --verbose -- -key=value -key2 value2
+// - atlantis check
 //
 func (e *CommentParser) Parse(comment string, vcsHost models.VCSHostType) CommentParseResult {
 	if multiLineRegex.MatchString(comment) {
@@ -142,7 +145,7 @@ func (e *CommentParser) Parse(comment string, vcsHost models.VCSHostType) Commen
 	}
 
 	// Need to have a plan or apply at this point.
-	if !e.stringInSlice(command, []string{PlanCommand.String(), ApplyCommand.String()}) {
+	if !e.stringInSlice(command, []string{PlanCommand.String(), ApplyCommand.String(), CheckCommand.String()}) {
 		return CommentParseResult{CommentResponse: fmt.Sprintf("```\nError: unknown command %q.\nRun 'atlantis --help' for usage.\n```", command)}
 	}
 
@@ -172,6 +175,15 @@ func (e *CommentParser) Parse(comment string, vcsHost models.VCSHostType) Commen
 		flagSet.StringVarP(&dir, dirFlagLong, dirFlagShort, "", "Apply the plan for this directory, relative to root of repo, ex. 'child/dir'.")
 		flagSet.StringVarP(&project, projectFlagLong, projectFlagShort, "", fmt.Sprintf("Apply the plan for this project. Refers to the name of the project configured in %s. Cannot be used at same time as workspace or dir flags.", yaml.AtlantisYAMLFilename))
 		flagSet.BoolVarP(&verbose, verboseFlagLong, verboseFlagShort, false, "Append Atlantis log to comment.")
+    case CheckCommand.String():
+		name = CheckCommand
+		flagSet = pflag.NewFlagSet(CheckCommand.String(), pflag.ContinueOnError)
+		flagSet.SetOutput(ioutil.Discard)
+		flagSet.StringVarP(&workspace, workspaceFlagLong, workspaceFlagShort, "", "Show the plan for this Terraform workspace.")
+		flagSet.StringVarP(&dir, dirFlagLong, dirFlagShort, "", "Show the plan for this directory, relative to root of repo, ex. 'child/dir'.")
+		flagSet.StringVarP(&project, projectFlagLong, projectFlagShort, "", fmt.Sprintf("Show the plan for this project. Refers to the name of the project configured in %s. Cannot be used at same time as workspace or dir flags.", yaml.AtlantisYAMLFilename))
+		flagSet.BoolVarP(&verbose, verboseFlagLong, verboseFlagShort, false, "Append Atlantis log to comment.")
+
 	default:
 		return CommentParseResult{CommentResponse: fmt.Sprintf("Error: unknown command %q – this is a bug", command)}
 	}
@@ -253,6 +265,12 @@ func (e *CommentParser) BuildPlanComment(repoRelDir string, workspace string, pr
 func (e *CommentParser) BuildApplyComment(repoRelDir string, workspace string, project string) string {
 	flags := e.buildFlags(repoRelDir, workspace, project)
 	return fmt.Sprintf("%s %s%s", atlantisExecutable, ApplyCommand.String(), flags)
+}
+
+// BuildCheckComment builds an apply comment for the specified args.
+func (e *CommentParser) BuildCheckComment(repoRelDir string, workspace string, project string) string {
+	flags := e.buildFlags(repoRelDir, workspace, project)
+	return fmt.Sprintf("%s %s%s", atlantisExecutable, CheckCommand.String(), flags)
 }
 
 func (e *CommentParser) buildFlags(repoRelDir string, workspace string, project string) string {

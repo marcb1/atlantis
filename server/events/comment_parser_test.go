@@ -170,6 +170,8 @@ func TestParse_SubcommandUsage(t *testing.T) {
 		"atlantis plan --help",
 		"atlantis apply -h",
 		"atlantis apply --help",
+        "atlantis check --help",
+        "atlantis check -h",
 	}
 	for _, c := range comments {
 		r := commentParser.Parse(c, models.Github)

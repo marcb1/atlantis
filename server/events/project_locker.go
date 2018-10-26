@@ -63,7 +63,7 @@ func (p *DefaultProjectLocker) TryLock(log *logging.SimpleLogger, pull models.Pu
 	}
 	if !lockAttempt.LockAcquired && lockAttempt.CurrLock.Pull.Num != pull.Num {
 		failureMsg := fmt.Sprintf(
-			"This project is currently locked by #%d. The locking plan must be applied or discarded before future plans can execute.",
+			"This project is currently locked by #%d. The locking plan must be applied or discarded before future plans can execute. Comment with `atlantis plan` on this PR, once the lock is released.",
 			lockAttempt.CurrLock.Pull.Num)
 		return &TryLockResponse{
 			LockAcquired:      false,

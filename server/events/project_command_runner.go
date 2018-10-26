@@ -82,6 +82,7 @@ type DefaultProjectCommandRunner struct {
 	LockURLGenerator        LockURLGenerator
 	InitStepRunner          StepRunner
 	PlanStepRunner          StepRunner
+    CheckStepRunner         StepRunner
 	ApplyStepRunner         StepRunner
 	RunStepRunner           StepRunner
 	PullApprovedChecker     runtime.PullApprovedChecker
@@ -100,6 +101,18 @@ func (p *DefaultProjectCommandRunner) Plan(ctx models.ProjectCommandContext) Pro
 		Failure:     failure,
 		RepoRelDir:  ctx.RepoRelDir,
 		Workspace:   ctx.Workspace,
+	}
+}
+
+// Check runs terraform show for the project described by ctx, if a terraform plan was previously run.
+func (p *DefaultProjectCommandRunner) Check(ctx models.ProjectCommandContext) ProjectResult {
+	checkOut, failure, err := p.doApply(ctx)
+	return ProjectResult{
+		Failure:            failure,
+		Error:              err,
+		CheckSuccess:       checkOut,
+		RepoRelDir:         ctx.RepoRelDir,
+		Workspace:          ctx.Workspace,
 	}
 }
 

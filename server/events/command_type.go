@@ -21,6 +21,8 @@ const (
 	ApplyCommand CommandName = iota
 	// PlanCommand is a command to run terraform plan.
 	PlanCommand
+    // CheckCommand is run before an apply, to double check plan, runs terraform show.
+    CheckCommand
 	// Adding more? Don't forget to update String() below
 )
 
@@ -31,6 +33,8 @@ func (c CommandName) String() string {
 		return "apply"
 	case PlanCommand:
 		return "plan"
+    case CheckCommand:
+        return "check"
 	}
 	return ""
 }

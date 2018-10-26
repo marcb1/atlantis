@@ -88,6 +88,7 @@ func (c *DefaultClient) Version() *version.Version {
 // Workspace is the terraform workspace to run in. We won't switch workspaces
 // but will set the TERRAFORM_WORKSPACE environment variable.
 func (c *DefaultClient) RunCommandWithVersion(log *logging.SimpleLogger, path string, args []string, v *version.Version, workspace string) (string, error) {
+	log.Debug("about to execute command")
 	tfExecutable := "terraform"
 	tfVersionStr := c.defaultVersion.String()
 	// if version is the same as the default, don't need to prepend the version name to the executable

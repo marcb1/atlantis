@@ -44,6 +44,12 @@ func TestRenderErr(t *testing.T) {
 			err,
 			"**Plan Error**\n```\nerr\n```\n",
 		},
+        {
+            "check error",
+            events.CheckCommand,
+            err,
+			"**Check Error**\n```\nerr\n```\n",
+        },
 	}
 
 	r := events.MarkdownRenderer{}
@@ -84,6 +90,14 @@ func TestRenderFailure(t *testing.T) {
 			"failure",
 			"**Plan Failed**: failure\n",
 		},
+		{
+			"check failure",
+			events.CheckCommand,
+			"failure",
+			"**Check Failed**: failure\n",
+		},
+
+
 	}
 
 	r := events.MarkdownRenderer{}
@@ -164,6 +178,40 @@ $$$
     * $atlantis apply$
 `,
 		},
+		{
+			"single successful check",
+			events.CheckCommand,
+			[]events.ProjectResult{
+				{
+					CheckSuccess: &events.CheckSuccess{
+						TerraformOutput: "terraform-output",
+						LockURL:         "lock-url",
+						RePlanCmd:       "atlantis plan -d path -w workspace",
+                        CheckCmd:        "atlantis check -d path -w workspace",
+						ApplyCmd:        "atlantis apply -d path -w workspace",
+					},
+					Workspace:  "workspace",
+					RepoRelDir: "path",
+				},
+			},
+			models.Github,
+			`Ran Plan in dir: $path$ workspace: $workspace$
+
+$$$diff
+terraform-output
+$$$
+
+* :arrow_forward: To **apply** this plan, comment:
+    * $atlantis apply -d path -w workspace$
+* :put_litter_in_its_place: To **delete** this plan click [here](lock-url)
+* :repeat: To **plan** this project again, comment:
+    * $atlantis plan -d path -w workspace$
+
+---
+* :fast_forward: To **apply** all unapplied plans from this pull request, comment:
+    * $atlantis apply$
+`,
+        },
 		{
 			"single successful apply",
 			events.ApplyCommand,
@@ -744,6 +792,12 @@ func TestRenderProjectResults_WrapSingleProject(t *testing.T) {
 								RePlanCmd:       "replancmd",
 								ApplyCmd:        "applycmd",
 							},
+						}
+                    case events.CheckCommand:
+						pr = events.ProjectResult{
+							RepoRelDir:   ".",
+							Workspace:    "default",
+							CheckSuccess: c.Output,
 						}
 					case events.ApplyCommand:
 						pr = events.ProjectResult{

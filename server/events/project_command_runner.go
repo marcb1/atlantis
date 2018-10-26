@@ -63,7 +63,18 @@ type PlanSuccess struct {
 	RePlanCmd string
 	// ApplyCmd is the command that users should run to apply this plan.
 	ApplyCmd string
+    // CheckCmd is the command that users should run to check this plan, before applying it.
+    CheckCmd string
 }
+
+// PlanSuccess is the result of a successful plan.
+type CheckSuccess struct {
+	// TerraformOutput is the output from Terraform of running plan.
+	TerraformOutput string
+	// LockURL is the full URL to the lock held by this plan.
+	LockURL string
+}
+
 
 //go:generate pegomock generate -m --use-experimental-model-gen --package mocks -o mocks/mock_project_command_runner.go ProjectCommandRunner
 
@@ -106,7 +117,7 @@ func (p *DefaultProjectCommandRunner) Plan(ctx models.ProjectCommandContext) Pro
 
 // Check runs terraform show for the project described by ctx, if a terraform plan was previously run.
 func (p *DefaultProjectCommandRunner) Check(ctx models.ProjectCommandContext) ProjectResult {
-	checkOut, failure, err := p.doApply(ctx)
+	checkOut, failure, err := p.doCheck(ctx)
 	return ProjectResult{
 		Failure:            failure,
 		Error:              err,
@@ -127,6 +138,59 @@ func (p *DefaultProjectCommandRunner) Apply(ctx models.ProjectCommandContext) Pr
 		Workspace:    ctx.Workspace,
 	}
 }
+
+func (p *DefaultProjectCommandRunner) doCheck(ctx models.ProjectCommandContext) (*CheckSuccess, string, error) {
+	// Acquire Atlantis lock for this repo/dir/workspace.
+	lockAttempt, err := p.Locker.TryLock(ctx.Log, ctx.Pull, ctx.User, ctx.Workspace, models.NewProject(ctx.BaseRepo.FullName, ctx.RepoRelDir))
+	if err != nil {
+		return nil, "", errors.Wrap(err, "acquiring lock")
+	}
+	if !lockAttempt.LockAcquired {
+		return nil, lockAttempt.LockFailureReason, nil
+	}
+	ctx.Log.Debug("acquired lock for project")
+
+	// Acquire internal lock for the directory we're going to operate in.
+	unlockFn, err := p.WorkingDirLocker.TryLock(ctx.BaseRepo.FullName, ctx.Pull.Num, ctx.Workspace)
+	if err != nil {
+		return nil, "", err
+	}
+	defer unlockFn()
+
+	// Clone is idempotent so okay to run even if the repo was already cloned.
+	repoDir, cloneErr := p.WorkingDir.Clone(ctx.Log, ctx.BaseRepo, ctx.HeadRepo, ctx.Pull, ctx.Workspace)
+	if cloneErr != nil {
+		if unlockErr := lockAttempt.UnlockFn(); unlockErr != nil {
+			ctx.Log.Err("error unlocking state after check error: %v", unlockErr)
+		}
+		return nil, "", cloneErr
+	}
+	projAbsPath := filepath.Join(repoDir, ctx.RepoRelDir)
+
+	// Use default stage unless another workflow is defined in config
+	stage := p.defaultCheckStage()
+	if ctx.ProjectConfig != nil && ctx.ProjectConfig.Workflow != nil {
+		ctx.Log.Debug("project configured to use workflow %q", *ctx.ProjectConfig.Workflow)
+		configuredStage := ctx.GlobalConfig.GetCheckStage(*ctx.ProjectConfig.Workflow)
+		if configuredStage != nil {
+			ctx.Log.Debug("project will use the configured stage for that workflow")
+			stage = *configuredStage
+		}
+	}
+	outputs, err := p.runSteps(stage.Steps, ctx, projAbsPath)
+	if err != nil {
+		if unlockErr := lockAttempt.UnlockFn(); unlockErr != nil {
+			ctx.Log.Err("error unlocking state after check error: %v", unlockErr)
+		}
+		return nil, "", fmt.Errorf("%s\n%s", err, strings.Join(outputs, "\n"))
+	}
+
+	return &CheckSuccess{
+		LockURL:         p.LockURLGenerator.GenerateLockURL(lockAttempt.LockKey),
+		TerraformOutput: strings.Join(outputs, "\n"),
+	}, "", nil
+}
+
 
 func (p *DefaultProjectCommandRunner) doPlan(ctx models.ProjectCommandContext) (*PlanSuccess, string, error) {
 	// Acquire Atlantis lock for this repo/dir/workspace.
@@ -179,6 +243,7 @@ func (p *DefaultProjectCommandRunner) doPlan(ctx models.ProjectCommandContext) (
 		TerraformOutput: strings.Join(outputs, "\n"),
 		RePlanCmd:       ctx.RePlanCmd,
 		ApplyCmd:        ctx.ApplyCmd,
+        CheckCmd:        ctx.CheckCmd,
 	}, "", nil
 }
 
@@ -247,15 +312,15 @@ func (p *DefaultProjectCommandRunner) doApply(ctx models.ProjectCommandContext) 
 	defer unlockFn()
 
 	// Use default stage unless another workflow is defined in config
-	stage := p.defaultApplyStage()
+	stage := p.defaultCheckStage()
 	if ctx.ProjectConfig != nil && ctx.ProjectConfig.Workflow != nil {
-		configuredStage := ctx.GlobalConfig.GetApplyStage(*ctx.ProjectConfig.Workflow)
+		configuredStage := ctx.GlobalConfig.GetCheckStage(*ctx.ProjectConfig.Workflow)
 		if configuredStage != nil {
 			stage = *configuredStage
 		}
 	}
 	outputs, err := p.runSteps(stage.Steps, ctx, absPath)
-	p.Webhooks.Send(ctx.Log, webhooks.ApplyResult{ // nolint: errcheck
+	p.Webhooks.Send(ctx.Log, webhooks.CheckResult{ // nolint: errcheck
 		Workspace: ctx.Workspace,
 		User:      ctx.User,
 		Repo:      ctx.BaseRepo,
@@ -286,6 +351,16 @@ func (p DefaultProjectCommandRunner) defaultApplyStage() valid.Stage {
 		Steps: []valid.Step{
 			{
 				StepName: "apply",
+			},
+		},
+	}
+}
+
+func (p DefaultProjectCommandRunner) defaultCheckStage() valid.Stage {
+	return valid.Stage{
+		Steps: []valid.Step{
+			{
+				StepName: "show",
 			},
 		},
 	}

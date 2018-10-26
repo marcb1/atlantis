@@ -8,6 +8,7 @@ import (
 type Workflow struct {
 	Apply *Stage `yaml:"apply,omitempty"`
 	Plan  *Stage `yaml:"plan,omitempty"`
+    Check *Stage `yaml:"check,omitempty"`
 }
 
 func (w Workflow) Validate() error {

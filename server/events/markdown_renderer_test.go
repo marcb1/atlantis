@@ -186,9 +186,6 @@ $$$
 					CheckSuccess: &events.CheckSuccess{
 						TerraformOutput: "terraform-output",
 						LockURL:         "lock-url",
-						RePlanCmd:       "atlantis plan -d path -w workspace",
-                        CheckCmd:        "atlantis check -d path -w workspace",
-						ApplyCmd:        "atlantis apply -d path -w workspace",
 					},
 					Workspace:  "workspace",
 					RepoRelDir: "path",

@@ -22,6 +22,15 @@ func (c Config) GetPlanStage(workflowName string) *Stage {
 	return nil
 }
 
+func (c Config) GetCheckStage(workflowName string) *Stage {
+	for name, flow := range c.Workflows {
+		if name == workflowName {
+			return flow.Check
+		}
+	}
+	return nil
+}
+
 func (c Config) GetApplyStage(workflowName string) *Stage {
 	for name, flow := range c.Workflows {
 		if name == workflowName {
@@ -87,4 +96,5 @@ type Step struct {
 type Workflow struct {
 	Apply *Stage
 	Plan  *Stage
+    Check *Stage
 }

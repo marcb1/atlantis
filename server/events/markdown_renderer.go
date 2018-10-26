@@ -130,11 +130,11 @@ func (m *MarkdownRenderer) renderProjectResults(results []ProjectResult, common 
 			} else {
 				resultData.Rendered = m.renderTemplate(applyUnwrappedSuccessTmpl, struct{ Output string }{result.ApplySuccess})
 			}
-		} else if result.CheckSuccess != "" {
-            if m.shouldUseWrappedTmpl(vcsHost, result.CheckSuccess) {
-                resultData.Rendered = m.renderTemplate(applyWrappedSuccessTmpl, struct{ Output string }{result.CheckSuccess})
+		} else if result.CheckSuccess != nil {
+            if m.shouldUseWrappedTmpl(vcsHost, result.CheckSuccess.TerraformOutput) {
+                resultData.Rendered = m.renderTemplate(applyWrappedSuccessTmpl, *result.CheckSuccess)
 			} else {
-				resultData.Rendered = m.renderTemplate(applyUnwrappedSuccessTmpl, struct{ Output string }{result.CheckSuccess})
+				resultData.Rendered = m.renderTemplate(applyUnwrappedSuccessTmpl, *result.CheckSuccess)
 			}
         } else {
 			resultData.Rendered = "Found no template. This is a bug!"

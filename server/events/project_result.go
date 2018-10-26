@@ -24,7 +24,7 @@ type ProjectResult struct {
 	Error              error
 	Failure            string
 	PlanSuccess        *PlanSuccess
-    CheckSuccess       string
+    CheckSuccess       *CheckSuccess
 	ApplySuccess       string
 }
 
